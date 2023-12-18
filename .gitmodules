@@ -1,0 +1,3 @@
+[submodule "pg_shared"]
+	path = pg_shared
+	url = git@github.com:arc12/pg_shared.git
