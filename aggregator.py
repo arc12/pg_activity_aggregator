@@ -46,39 +46,40 @@ def aggregator():
             if len(df) == 0:
                 # create a nil activity record
                 dh = dt.fromtimestamp(start_ts).strftime("%Y-%m-%dT%H")
-                rec = {"tag": "-", "plaything_name": "-", "plaything_part": "-", "specification_id": "-", "date_hr": dh, "count": 0, "sessions": 0, "partition_key": "1"}
+                rec = {"tag": "-", "plaything_name": "-", "plaything_part": "-", "specification_id": "-", "date_hr": dh, "count": 0, "sessions": 0, "start_ts": start_ts, "partition_key": "1"}
                 ac.aggregated_container.create_item(rec, enable_automatic_id_generation=True)
             else:
                 # compute and store aggregated                
                 # there is no bulk API to CosmosDB (for Python SDK), so loop. NB there is actually an async client but I don't think it is warranted here
                 for ix, group in df.groupby(by=["tag", "plaything_name", "plaything_part", "specification_id"]):
                     rec = group.iloc[0].drop(["session_id"]).to_dict()
-                    rec.update({"count": len(group), "sessions": group.session_id.nunique(), "partition_key": "1"})  # force single partition
+                    rec.update({"count": len(group), "sessions": group.session_id.nunique(), "start_ts": start_ts, "partition_key": "1"})  # force single partition
                     ac.aggregated_container.create_item(rec, enable_automatic_id_generation=True)
 
             # check for last hour and make a date record, re-querying the agg container
             if rec["date_hr"].endswith("T23"):
                 d = rec["date_hr"][:10]
+                d_start_ts = start_ts - 23 * 3600
                 qry = f"SELECT c.tag, c.plaything_name, c.plaything_part, c.specification_id, c.count, c.sessions FROM c WHERE STARTSWITH(c.date_hr, '{d}')"
                 hours_df = pd.DataFrame(ac.aggregated_container.query_items(qry, enable_cross_partition_query=True))
                 # if the hours agg only contains "-" plaything entries, they are all "nil activity" records
                 pt_names = hours_df.plaything_name.unique()
                 if (len(pt_names) == 1) and (pt_names[0] == "-"):
-                    rec = {"tag": "-", "plaything_name": "-", "plaything_part": "-", "specification_id": "-", "date": d, "count": 0, "sessions": 0, "partition_key": "1"}
+                    rec = {"tag": "-", "plaything_name": "-", "plaything_part": "-", "specification_id": "-", "date": d, "start_ts": d_start_ts, "count": 0, "sessions": 0, "partition_key": "1"}
                     ac.aggregated_container.create_item(rec, enable_automatic_id_generation=True)
                 else:
                     # zero-hour placeholders should be removed before creating day sums
                     for ix, group in hours_df.loc[hours_df.plaything_name != "-"].groupby(by=["tag", "plaything_name", "plaything_part", "specification_id"]):
                         rec = group.iloc[0][["tag", "plaything_name", "plaything_part", "specification_id"]].to_dict()
                         rec.update(group[["count", "sessions"]].sum(axis=0).to_dict())
-                        rec["date"] = d
-                        rec["partition_key"] = "1"  # force single partition
+                        rec.update({"date": d, "start_ts": d_start_ts, "partition_key": "1"})  # force single partition
                         ac.aggregated_container.create_item(rec, enable_automatic_id_generation=True)
+                logging.info(f"Completed date aggregation for {d}.")
 
             # prep for next iter
             start_ts += 3600
             n_updates += 1
-        logging.info(f"Completed {n_updates} hour aggregations. Last covered timestamp = {end_ts}")
+        logging.info(f"Completed {n_updates} hour aggregations. Last covered timestamp = {end_ts}.")
 
 if __name__ == "__main__":
     aggregator()
