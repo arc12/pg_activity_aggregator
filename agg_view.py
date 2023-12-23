@@ -4,7 +4,7 @@ from pg_shared import LangstringsBase, AnalyticsCore
 # This is basically the same as the plaything formula but "analytics things" differ in not having the concept of a specification.
 # The language requirement now becomes a query string parameter and selecting the correct "about" markdown relies on it being named like: about_en.md
 
-AT_NAME = "agg_view"
+AT_NAME = "agg-view"
 
 class Langstrings(LangstringsBase):
     langstrings = {

@@ -10,7 +10,7 @@
         "get",
         "post"
       ],
-      "route": "agg_view/{*route}"
+      "route": "agg-view/{*route}"
     },
     {
       "type": "http",
